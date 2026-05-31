@@ -1,6 +1,8 @@
 import { SurveyDraft } from '../types';
 import { initialSurvey } from '../data/mockData';
 
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? '';
+
 export interface GenerateSurveyRequest {
   goal: string;
   audience: string;
@@ -9,7 +11,7 @@ export interface GenerateSurveyRequest {
 
 export async function generateSurveyDraft(request: GenerateSurveyRequest): Promise<SurveyDraft> {
   try {
-    const response = await fetch('/api/ai/survey-draft', {
+    const response = await fetch(`${API_BASE_URL}/api/ai/survey-draft`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(request),
