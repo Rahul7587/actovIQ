@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="ActovIQ logo">
-  <rect width="64" height="64" rx="14" fill="#05070d"/>
-  <path d="M32 10 51 21v22L32 54 13 43V21L32 10Z" fill="#2d74ff"/>
-  <path d="M32 18 44 25v14L32 46 20 39V25l12-7Z" fill="#05070d"/>
-  <path d="M32 23 39 39h-5l-1.1-3h-6L25.8 39H21l7-16h4Zm-.4 9-1.7-4.8L28.2 32h3.4Z" fill="#ffffff"/>
-</svg>

@@ -4,7 +4,6 @@ import {
   AlertTriangle,
   ArrowRight,
   BarChart3,
-  Bot,
   Brain,
   BriefcaseBusiness,
   Building2,
@@ -184,9 +183,11 @@ function TopNav({
     <header className="sticky top-0 z-50 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_86%,transparent)] backdrop-blur-xl">
       <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 lg:px-8">
         <button onClick={() => setPage('landing')} className="flex items-center gap-3 text-left">
-          <span className="grid h-10 w-10 place-items-center rounded-lg bg-[#2d74ff] text-white shadow-[0_12px_36px_rgba(45,116,255,0.35)]">
-            <Bot size={21} />
-          </span>
+          <img
+            src="/actoviq-logo.png"
+            alt="ActovIQ logo"
+            className="h-10 w-10 rounded-lg object-cover shadow-[0_12px_36px_rgba(45,116,255,0.35)]"
+          />
           <span>
             <span className="block text-lg font-semibold leading-5">ActovIQ</span>
             <span className="block text-xs text-[var(--muted)]">Decision intelligence</span>
