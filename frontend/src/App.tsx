@@ -181,16 +181,16 @@ function TopNav({
 }) {
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_86%,transparent)] backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-4 lg:px-8">
-        <button onClick={() => setPage('landing')} className="flex items-center gap-3 text-left">
+      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-5 lg:px-8">
+        <button onClick={() => setPage('landing')} className="flex items-center gap-4 text-left">
           <img
             src="/actoviq-logo.png"
             alt="ActovIQ logo"
-            className="h-10 w-10 rounded-lg object-cover shadow-[0_12px_36px_rgba(45,116,255,0.35)]"
+            className="h-14 w-14 rounded-xl object-cover shadow-[0_16px_44px_rgba(45,116,255,0.38)]"
           />
           <span>
-            <span className="block text-lg font-semibold leading-5">ActovIQ</span>
-            <span className="block text-xs text-[var(--muted)]">Decision intelligence</span>
+            <span className="block text-2xl font-semibold leading-6 tracking-normal">ActovIQ</span>
+            <span className="mt-1 block text-sm text-[var(--muted)]">Decision intelligence</span>
           </span>
         </button>
         <nav className="hidden items-center gap-1 xl:flex">
@@ -337,7 +337,7 @@ function LandingPage({ setPage }: { setPage: (page: Page) => void }) {
         </div>
       </Section>
 
-      <Section eyebrow="Testimonials" title="The reaction we optimize for: this is smarter than SurveyMonkey.">
+      <Section eyebrow="Testimonials" title="Built for teams that want decisions, not dashboards.">
         <div className="grid gap-4 md:grid-cols-3">
           {[
             ['We stopped debating dashboards and started acting on the top three risks every Monday.', 'Founder, B2B SaaS'],
