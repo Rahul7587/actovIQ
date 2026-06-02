@@ -9,35 +9,41 @@ import {
   Building2,
   Check,
   ChevronRight,
-  ClipboardList,
   Code2,
+  Copy,
+  Eye,
   FileText,
   Globe2,
+  GripVertical,
   GraduationCap,
+  History,
   Landmark,
   LayoutDashboard,
   LineChart,
-  Loader2,
   Lock,
   MessageSquareText,
+  Monitor,
   Moon,
   Plus,
   QrCode,
+  Redo2,
   Search,
+  Save,
   ShieldCheck,
+  Smartphone,
   Sparkles,
   Stethoscope,
   Sun,
+  Tablet,
   Target,
+  Trash2,
   TrendingUp,
-  Users,
+  Undo2,
+  Upload,
   Wand2,
   Workflow,
   Zap,
 } from 'lucide-react';
-import { generateSurveyDraft } from './api/surveys';
-import { initialSurvey } from './data/mockData';
-import { QuestionType, SurveyDraft, SurveyQuestion } from './types';
 
 type Page =
   | 'landing'
@@ -71,13 +77,6 @@ const appNav = [
   { id: 'reports' as Page, label: 'AI Reports', icon: FileText },
   { id: 'pricing' as Page, label: 'Billing', icon: BriefcaseBusiness },
 ];
-
-const questionLabels: Record<QuestionType, string> = {
-  rating: 'Score',
-  singleChoice: 'Choice',
-  multiChoice: 'Multi-select',
-  text: 'Open text',
-};
 
 const featureCards = [
   ['AI Survey Generation', 'Describe what you need to learn. ActovIQ creates the full research structure automatically.', Wand2],
@@ -124,6 +123,103 @@ const reportSections = [
   'Recommendations',
   'Action plan',
 ];
+
+type BuilderQuestionType =
+  | 'shortText'
+  | 'longText'
+  | 'email'
+  | 'phone'
+  | 'date'
+  | 'singleChoice'
+  | 'multipleChoice'
+  | 'dropdown'
+  | 'starRating'
+  | 'nps'
+  | 'likert'
+  | 'ranking'
+  | 'matrix'
+  | 'fileUpload';
+
+type PreviewDevice = 'desktop' | 'tablet' | 'mobile';
+
+interface BuilderQuestion {
+  id: string;
+  type: BuilderQuestionType;
+  title: string;
+  description: string;
+  required: boolean;
+  settings: {
+    placeholder: string;
+    minLength?: number;
+    maxLength?: number;
+    helpText: string;
+    defaultValue: string;
+    randomizeOptions: boolean;
+  };
+  options: string[];
+  order: number;
+}
+
+interface BuilderSection {
+  id: string;
+  title: string;
+  order: number;
+  questions: BuilderQuestion[];
+}
+
+interface BuilderSurvey {
+  id: string;
+  title: string;
+  description: string;
+  status: 'Draft' | 'Published';
+  settings: {
+    branding: {
+      logoName: string;
+      primaryColor: string;
+      secondaryColor: string;
+    };
+    behavior: {
+      anonymousResponses: boolean;
+      allowMultipleResponses: boolean;
+      progressBar: boolean;
+    };
+    limits: {
+      responseLimit: number;
+      expirationDate: string;
+    };
+    thankYou: {
+      title: string;
+      message: string;
+    };
+  };
+  sections: BuilderSection[];
+}
+
+const questionTypeLabels: Record<BuilderQuestionType, string> = {
+  shortText: 'Short Text',
+  longText: 'Long Text',
+  email: 'Email',
+  phone: 'Phone Number',
+  date: 'Date',
+  singleChoice: 'Single Choice',
+  multipleChoice: 'Multiple Choice',
+  dropdown: 'Dropdown',
+  starRating: 'Star Rating',
+  nps: 'NPS',
+  likert: 'Likert Scale',
+  ranking: 'Ranking',
+  matrix: 'Matrix',
+  fileUpload: 'File Upload',
+};
+
+const questionLibrary: Array<{ category: string; items: BuilderQuestionType[] }> = [
+  { category: 'Basic Inputs', items: ['shortText', 'longText', 'email', 'phone', 'date'] },
+  { category: 'Choice Questions', items: ['singleChoice', 'multipleChoice', 'dropdown'] },
+  { category: 'Rating Questions', items: ['starRating', 'nps', 'likert'] },
+  { category: 'Advanced Questions', items: ['ranking', 'matrix', 'fileUpload'] },
+];
+
+const choiceQuestionTypes: BuilderQuestionType[] = ['singleChoice', 'multipleChoice', 'dropdown', 'ranking', 'matrix', 'likert'];
 
 function App() {
   const [page, setPage] = useState<Page>('landing');
@@ -504,141 +600,840 @@ function DashboardCanvas({ compact = false }: { compact?: boolean }) {
 }
 
 function BuilderPage({ setPage }: { setPage: (page: Page) => void }) {
-  const [survey, setSurvey] = useState<SurveyDraft>(initialSurvey);
-  const [goal, setGoal] = useState('Create a customer satisfaction survey for an ecommerce company.');
-  const [audience, setAudience] = useState('Recent ecommerce buyers in India and global markets');
-  const [tone, setTone] = useState('Confident, concise, executive-friendly');
-  const [isGenerating, setIsGenerating] = useState(false);
+  const [survey, setSurvey] = useState<BuilderSurvey>(createInitialBuilderSurvey());
+  const [selectedQuestionId, setSelectedQuestionId] = useState('q-csat');
+  const [selectedSectionId, setSelectedSectionId] = useState('section-customer-experience');
+  const [query, setQuery] = useState('');
+  const [saveStatus, setSaveStatus] = useState('All changes saved');
+  const [previewMode, setPreviewMode] = useState(false);
+  const [previewDevice, setPreviewDevice] = useState<PreviewDevice>('desktop');
 
-  const requiredCount = useMemo(() => survey.questions.filter((question) => question.required).length, [survey.questions]);
+  const selectedQuestion = useMemo(
+    () => survey.sections.flatMap((section) => section.questions).find((question) => question.id === selectedQuestionId),
+    [survey.sections, selectedQuestionId],
+  );
 
-  async function handleGenerate() {
-    setIsGenerating(true);
-    const draft = await generateSurveyDraft({ goal, audience, tone });
-    setSurvey(draft);
-    setIsGenerating(false);
+  const selectedSection = useMemo(
+    () => survey.sections.find((section) => section.id === selectedSectionId) ?? survey.sections[0],
+    [survey.sections, selectedSectionId],
+  );
+
+  function touch(status = 'Auto-saved just now') {
+    setSaveStatus(status);
   }
 
-  function addQuestion(type: QuestionType) {
-    const question: SurveyQuestion = {
-      id: `q-${Date.now()}`,
-      type,
-      prompt: type === 'text' ? 'What decision should this feedback influence?' : 'Which option best explains this feedback signal?',
-      required: false,
-      options: type === 'singleChoice' || type === 'multiChoice' ? ['Pricing', 'Support', 'Product quality', 'Delivery'] : undefined,
+  function updateSurvey(updater: (current: BuilderSurvey) => BuilderSurvey) {
+    setSurvey((current) => updater(current));
+    touch();
+  }
+
+  function updateSurveyField<K extends 'title' | 'description'>(key: K, value: BuilderSurvey[K]) {
+    updateSurvey((current) => ({ ...current, [key]: value }));
+  }
+
+  function updateQuestion(questionId: string, updater: (question: BuilderQuestion) => BuilderQuestion) {
+    updateSurvey((current) => ({
+      ...current,
+      sections: current.sections.map((section) => ({
+        ...section,
+        questions: section.questions.map((question) => (question.id === questionId ? updater(question) : question)),
+      })),
+    }));
+  }
+
+  function addSection() {
+    const id = createId('section');
+    updateSurvey((current) => ({
+      ...current,
+      sections: [
+        ...current.sections,
+        {
+          id,
+          title: `Section ${current.sections.length + 1}`,
+          order: current.sections.length,
+          questions: [],
+        },
+      ],
+    }));
+    setSelectedSectionId(id);
+  }
+
+  function updateSection(sectionId: string, updater: (section: BuilderSection) => BuilderSection) {
+    updateSurvey((current) => ({ ...current, sections: current.sections.map((section) => (section.id === sectionId ? updater(section) : section)) }));
+  }
+
+  function deleteSection(sectionId: string) {
+    if (survey.sections.length === 1) return;
+    const nextSection = survey.sections.find((section) => section.id !== sectionId);
+    updateSurvey((current) => ({ ...current, sections: current.sections.filter((section) => section.id !== sectionId).map(withOrder) }));
+    if (nextSection) setSelectedSectionId(nextSection.id);
+  }
+
+  function duplicateSection(sectionId: string) {
+    const section = survey.sections.find((item) => item.id === sectionId);
+    if (!section) return;
+    const copy: BuilderSection = {
+      ...section,
+      id: createId('section'),
+      title: `${section.title} copy`,
+      questions: section.questions.map((question, index) => ({ ...question, id: createId('question'), order: index })),
+      order: survey.sections.length,
     };
-    setSurvey((current) => ({ ...current, questions: [...current.questions, question] }));
+    updateSurvey((current) => ({ ...current, sections: [...current.sections, copy] }));
+    setSelectedSectionId(copy.id);
+  }
+
+  function reorderSections(fromId: string, toId: string) {
+    const fromIndex = survey.sections.findIndex((section) => section.id === fromId);
+    const toIndex = survey.sections.findIndex((section) => section.id === toId);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+    updateSurvey((current) => ({ ...current, sections: moveItem(current.sections, fromIndex, toIndex).map(withOrder) }));
+  }
+
+  function addQuestion(type: BuilderQuestionType, sectionId = selectedSection.id) {
+    const question = createQuestion(type);
+    updateSection(sectionId, (section) => ({ ...section, questions: [...section.questions, { ...question, order: section.questions.length }] }));
+    setSelectedSectionId(sectionId);
+    setSelectedQuestionId(question.id);
+  }
+
+  function deleteQuestion(sectionId: string, questionId: string) {
+    updateSection(sectionId, (section) => ({ ...section, questions: section.questions.filter((question) => question.id !== questionId).map(withOrder) }));
+    if (selectedQuestionId === questionId) setSelectedQuestionId('');
+  }
+
+  function duplicateQuestion(sectionId: string, questionId: string) {
+    const section = survey.sections.find((item) => item.id === sectionId);
+    const question = section?.questions.find((item) => item.id === questionId);
+    if (!section || !question) return;
+    const questionIndex = section.questions.findIndex((item) => item.id === questionId);
+    const copy = { ...question, id: createId('question'), title: `${question.title} copy` };
+    updateSection(sectionId, (current) => {
+      const next = [...current.questions];
+      next.splice(questionIndex + 1, 0, copy);
+      return { ...current, questions: next.map(withOrder) };
+    });
+    setSelectedQuestionId(copy.id);
+  }
+
+  function reorderQuestion(sectionId: string, fromQuestionId: string, toQuestionId: string) {
+    const section = survey.sections.find((item) => item.id === sectionId);
+    if (!section) return;
+    const fromIndex = section.questions.findIndex((question) => question.id === fromQuestionId);
+    const toIndex = section.questions.findIndex((question) => question.id === toQuestionId);
+    if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
+    updateSection(sectionId, (current) => ({ ...current, questions: moveItem(current.questions, fromIndex, toIndex).map(withOrder) }));
   }
 
   return (
     <AppShell active="builder" setPage={setPage}>
-      <PageHeader eyebrow="Survey intelligence builder" title="Generate the whole feedback system from a prompt." copy="Questions, sections, branching logic, collection formats, and intelligence structure are generated together." />
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_390px]">
-        <div className="space-y-6">
-          <Card>
-            <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-[#6ea1ff]">Plain English prompt</p>
-                <h2 className="mt-1 text-xl font-semibold">Tell ActovIQ the decision you need to make</h2>
-              </div>
-              <button onClick={handleGenerate} disabled={isGenerating} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#2d74ff] px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-70">
-                {isGenerating ? <Loader2 className="animate-spin" size={16} /> : <Sparkles size={16} />}
-                Generate intelligence plan
-              </button>
-            </div>
-            <div className="mt-5 grid gap-4 md:grid-cols-2">
-              <Field label="Business decision" value={goal} setValue={setGoal} textarea />
-              <Field label="Audience" value={audience} setValue={setAudience} />
-              <Field label="Tone" value={tone} setValue={setTone} />
-            </div>
-          </Card>
-          <Card>
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-[#6ea1ff]">Generated structure</p>
-                <h2 className="mt-1 text-xl font-semibold">{survey.title}</h2>
-                <p className="mt-1 text-sm text-[var(--muted)]">{survey.questions.length} questions, {requiredCount} required, branching-ready</p>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {(['rating', 'singleChoice', 'text'] as QuestionType[]).map((type) => (
-                  <button key={type} onClick={() => addQuestion(type)} className="inline-flex items-center gap-2 rounded-lg border border-[var(--line)] px-3 py-2 text-sm font-medium">
-                    <Plus size={15} />
-                    {questionLabels[type]}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="mt-5 space-y-3">
-              {survey.questions.map((question, index) => (
-                <article key={question.id} className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-4">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="rounded-md bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">Q{index + 1}</span>
-                        <span className="rounded-md bg-[#2d74ff]/12 px-2 py-1 text-xs font-semibold text-[#6ea1ff]">{questionLabels[question.type]}</span>
-                        {question.required && <span className="rounded-md bg-white/8 px-2 py-1 text-xs font-semibold">Required</span>}
-                      </div>
-                      <p className="mt-3 text-sm font-medium leading-6">{question.prompt}</p>
-                    </div>
-                    <Workflow className="mt-1 shrink-0 text-[#6ea1ff]" size={18} />
-                  </div>
-                  {question.options && (
-                    <div className="mt-3 flex flex-wrap gap-2">
-                      {question.options.map((option) => (
-                        <span key={option} className="rounded-md border border-[var(--line)] bg-[var(--panel)] px-2.5 py-1 text-xs text-[var(--muted)]">{option}</span>
-                      ))}
-                    </div>
-                  )}
-                </article>
-              ))}
-            </div>
-          </Card>
-        </div>
-        <BuilderAside survey={survey} />
+      <BuilderToolbar
+        survey={survey}
+        previewMode={previewMode}
+        saveStatus={saveStatus}
+        previewDevice={previewDevice}
+        setPreviewMode={setPreviewMode}
+        setPreviewDevice={setPreviewDevice}
+        updateSurveyField={updateSurveyField}
+        touch={touch}
+      />
+
+      <div className="mt-4 grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
+        <QuestionLibrary query={query} setQuery={setQuery} addQuestion={addQuestion} />
+        {previewMode ? (
+          <SurveyPreview survey={survey} device={previewDevice} />
+        ) : (
+          <SurveyCanvas
+            survey={survey}
+            selectedQuestionId={selectedQuestionId}
+            selectedSectionId={selectedSectionId}
+            setSelectedQuestionId={setSelectedQuestionId}
+            setSelectedSectionId={setSelectedSectionId}
+            addSection={addSection}
+            addQuestion={addQuestion}
+            updateSection={updateSection}
+            deleteSection={deleteSection}
+            duplicateSection={duplicateSection}
+            reorderSections={reorderSections}
+            deleteQuestion={deleteQuestion}
+            duplicateQuestion={duplicateQuestion}
+            reorderQuestion={reorderQuestion}
+          />
+        )}
+        <BuilderConfigPanel
+          survey={survey}
+          selectedQuestion={selectedQuestion}
+          selectedSection={selectedSection}
+          updateSurvey={updateSurvey}
+          updateQuestion={updateQuestion}
+          addQuestion={addQuestion}
+        />
       </div>
     </AppShell>
   );
 }
 
-function BuilderAside({ survey }: { survey: SurveyDraft }) {
+function BuilderToolbar({
+  survey,
+  previewMode,
+  saveStatus,
+  previewDevice,
+  setPreviewMode,
+  setPreviewDevice,
+  updateSurveyField,
+  touch,
+}: {
+  survey: BuilderSurvey;
+  previewMode: boolean;
+  saveStatus: string;
+  previewDevice: PreviewDevice;
+  setPreviewMode: (value: boolean) => void;
+  setPreviewDevice: (value: PreviewDevice) => void;
+  updateSurveyField: <K extends 'title' | 'description'>(key: K, value: BuilderSurvey[K]) => void;
+  touch: (status?: string) => void;
+}) {
   return (
-    <aside className="space-y-6">
+    <div className="sticky top-[105px] z-30 rounded-lg border border-[var(--line)] bg-[color-mix(in_srgb,var(--panel)_92%,transparent)] p-3 shadow-[0_18px_50px_rgba(0,0,0,0.16)] backdrop-blur-xl">
+      <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-center gap-2">
+            <input
+              value={survey.title}
+              onChange={(event) => updateSurveyField('title', event.target.value)}
+              className="min-w-72 rounded-lg border border-transparent bg-transparent px-2 py-1 text-xl font-semibold outline-none transition focus:border-[var(--line)] focus:bg-[var(--panel-2)]"
+            />
+            <span className={`rounded-md px-2 py-1 text-xs font-semibold ${survey.status === 'Published' ? 'bg-emerald-500/15 text-emerald-300' : 'bg-[#2d74ff]/12 text-[#6ea1ff]'}`}>
+              {survey.status}
+            </span>
+            <span className="rounded-md bg-[var(--panel-2)] px-2 py-1 text-xs text-[var(--muted)]">{saveStatus}</span>
+          </div>
+          <p className="mt-1 px-2 text-xs text-[var(--muted)]">Version history is ready for future collaboration workflows.</p>
+        </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <IconButton label="Undo" icon={Undo2} onClick={() => touch('Undo placeholder')} />
+          <IconButton label="Redo" icon={Redo2} onClick={() => touch('Redo placeholder')} />
+          <IconButton label="Version history" icon={History} onClick={() => touch('Version history placeholder')} />
+          <button onClick={() => setPreviewMode(!previewMode)} className="inline-flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm font-semibold">
+            <Eye size={16} />
+            {previewMode ? 'Edit' : 'Preview'}
+          </button>
+          {previewMode && (
+            <div className="flex rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-1">
+              {[
+                ['desktop', Monitor],
+                ['tablet', Tablet],
+                ['mobile', Smartphone],
+              ].map(([device, Icon]) => {
+                const DeviceIcon = Icon as typeof Tablet;
+                return (
+                  <button
+                    key={device as string}
+                    onClick={() => setPreviewDevice(device as PreviewDevice)}
+                    className={`grid h-8 w-8 place-items-center rounded-md ${previewDevice === device ? 'bg-[#2d74ff] text-white' : 'text-[var(--muted)]'}`}
+                    aria-label={`${device} preview`}
+                  >
+                    <DeviceIcon size={15} />
+                  </button>
+                );
+              })}
+            </div>
+          )}
+          <button onClick={() => touch('Saved manually')} className="inline-flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm font-semibold">
+            <Save size={16} />
+            Save
+          </button>
+          <button onClick={() => touch('Publish queued')} className="inline-flex items-center gap-2 rounded-lg bg-[#2d74ff] px-3 py-2 text-sm font-semibold text-white">
+            <Upload size={16} />
+            Publish
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function QuestionLibrary({
+  query,
+  setQuery,
+  addQuestion,
+}: {
+  query: string;
+  setQuery: (query: string) => void;
+  addQuestion: (type: BuilderQuestionType) => void;
+}) {
+  const normalizedQuery = query.trim().toLowerCase();
+  return (
+    <aside className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4 xl:sticky xl:top-[210px] xl:max-h-[calc(100vh-230px)] xl:overflow-auto">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-sm font-semibold text-[#6ea1ff]">Question blocks</p>
+          <h2 className="mt-1 text-lg font-semibold">Drag onto canvas</h2>
+        </div>
+        <GripVertical size={18} className="text-[var(--muted)]" />
+      </div>
+      <label className="mt-4 flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2">
+        <Search size={15} className="text-[var(--muted)]" />
+        <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search question types" className="w-full bg-transparent text-sm outline-none" />
+      </label>
+      <div className="mt-4 space-y-5">
+        {questionLibrary.map((group) => {
+          const items = group.items.filter((type) => questionTypeLabels[type].toLowerCase().includes(normalizedQuery));
+          if (!items.length) return null;
+          return (
+            <div key={group.category}>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{group.category}</p>
+              <div className="space-y-2">
+                {items.map((type) => (
+                  <button
+                    key={type}
+                    draggable
+                    onDragStart={(event) => event.dataTransfer.setData('question-type', type)}
+                    onClick={() => addQuestion(type)}
+                    className="flex w-full items-center justify-between rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2.5 text-left text-sm transition hover:-translate-y-0.5 hover:border-[#2d74ff]/50"
+                  >
+                    <span>{questionTypeLabels[type]}</span>
+                    <Plus size={15} className="text-[#6ea1ff]" />
+                  </button>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </aside>
+  );
+}
+
+function SurveyCanvas({
+  survey,
+  selectedQuestionId,
+  selectedSectionId,
+  setSelectedQuestionId,
+  setSelectedSectionId,
+  addSection,
+  addQuestion,
+  updateSection,
+  deleteSection,
+  duplicateSection,
+  reorderSections,
+  deleteQuestion,
+  duplicateQuestion,
+  reorderQuestion,
+}: {
+  survey: BuilderSurvey;
+  selectedQuestionId: string;
+  selectedSectionId: string;
+  setSelectedQuestionId: (id: string) => void;
+  setSelectedSectionId: (id: string) => void;
+  addSection: () => void;
+  addQuestion: (type: BuilderQuestionType, sectionId?: string) => void;
+  updateSection: (sectionId: string, updater: (section: BuilderSection) => BuilderSection) => void;
+  deleteSection: (sectionId: string) => void;
+  duplicateSection: (sectionId: string) => void;
+  reorderSections: (fromId: string, toId: string) => void;
+  deleteQuestion: (sectionId: string, questionId: string) => void;
+  duplicateQuestion: (sectionId: string, questionId: string) => void;
+  reorderQuestion: (sectionId: string, fromQuestionId: string, toQuestionId: string) => void;
+}) {
+  return (
+    <section className="min-w-0 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+      <div className="flex flex-col gap-3 border-b border-[var(--line)] pb-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-semibold text-[#6ea1ff]">Center canvas</p>
+          <h2 className="mt-1 text-2xl font-semibold">Survey structure</h2>
+        </div>
+        <button onClick={addSection} className="inline-flex w-fit items-center gap-2 rounded-lg bg-[#2d74ff] px-3 py-2 text-sm font-semibold text-white">
+          <Plus size={16} />
+          Add section
+        </button>
+      </div>
+      <div className="mt-4 space-y-4">
+        {survey.sections.map((section, sectionIndex) => (
+          <article
+            key={section.id}
+            draggable
+            onDragStart={(event) => event.dataTransfer.setData('section-id', section.id)}
+            onDragOver={(event) => event.preventDefault()}
+            onDrop={(event) => {
+              event.preventDefault();
+              const sectionId = event.dataTransfer.getData('section-id');
+              const questionType = event.dataTransfer.getData('question-type') as BuilderQuestionType;
+              if (sectionId) reorderSections(sectionId, section.id);
+              if (questionType) addQuestion(questionType, section.id);
+            }}
+            className={`rounded-lg border bg-[var(--panel-2)] p-4 transition ${selectedSectionId === section.id ? 'border-[#2d74ff]/70 shadow-[0_0_0_1px_rgba(45,116,255,0.35)]' : 'border-[var(--line)]'}`}
+          >
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <div className="flex min-w-0 flex-1 items-center gap-3">
+                <GripVertical size={18} className="shrink-0 text-[var(--muted)]" />
+                <span className="shrink-0 rounded-md bg-[var(--panel)] px-2 py-1 text-xs font-semibold text-[var(--muted)]">Section {sectionIndex + 1}</span>
+                <input
+                  value={section.title}
+                  onChange={(event) => updateSection(section.id, (current) => ({ ...current, title: event.target.value }))}
+                  onFocus={() => setSelectedSectionId(section.id)}
+                  className="min-w-0 flex-1 rounded-md border border-transparent bg-transparent px-2 py-1 font-semibold outline-none focus:border-[var(--line)] focus:bg-[var(--panel)]"
+                />
+              </div>
+              <div className="flex items-center gap-1">
+                <IconButton label="Duplicate section" icon={Copy} onClick={() => duplicateSection(section.id)} />
+                <IconButton label="Delete section" icon={Trash2} onClick={() => deleteSection(section.id)} />
+              </div>
+            </div>
+            <div className="mt-4 space-y-3">
+              {section.questions.map((question) => (
+                <QuestionCard
+                  key={question.id}
+                  question={question}
+                  sectionId={section.id}
+                  active={selectedQuestionId === question.id}
+                  select={() => {
+                    setSelectedSectionId(section.id);
+                    setSelectedQuestionId(question.id);
+                  }}
+                  duplicateQuestion={duplicateQuestion}
+                  deleteQuestion={deleteQuestion}
+                  reorderQuestion={reorderQuestion}
+                />
+              ))}
+              <button
+                onDragOver={(event) => event.preventDefault()}
+                onDrop={(event) => {
+                  event.preventDefault();
+                  const questionType = event.dataTransfer.getData('question-type') as BuilderQuestionType;
+                  if (questionType) addQuestion(questionType, section.id);
+                }}
+                onClick={() => addQuestion('shortText', section.id)}
+                className="flex w-full items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--line)] bg-[var(--panel)] px-4 py-4 text-sm font-semibold text-[var(--muted)] transition hover:border-[#2d74ff]/60 hover:text-[#6ea1ff]"
+              >
+                <Plus size={16} />
+                Drop a question block or add short text
+              </button>
+            </div>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function QuestionCard({
+  question,
+  sectionId,
+  active,
+  select,
+  duplicateQuestion,
+  deleteQuestion,
+  reorderQuestion,
+}: {
+  question: BuilderQuestion;
+  sectionId: string;
+  active: boolean;
+  select: () => void;
+  duplicateQuestion: (sectionId: string, questionId: string) => void;
+  deleteQuestion: (sectionId: string, questionId: string) => void;
+  reorderQuestion: (sectionId: string, fromQuestionId: string, toQuestionId: string) => void;
+}) {
+  return (
+    <div
+      draggable
+      onDragStart={(event) => {
+        event.dataTransfer.setData('question-id', question.id);
+        event.dataTransfer.setData('question-section-id', sectionId);
+      }}
+      onDragOver={(event) => event.preventDefault()}
+      onDrop={(event) => {
+        event.preventDefault();
+        const questionId = event.dataTransfer.getData('question-id');
+        const sourceSectionId = event.dataTransfer.getData('question-section-id');
+        if (questionId && sourceSectionId === sectionId) reorderQuestion(sectionId, questionId, question.id);
+      }}
+      onClick={select}
+      className={`rounded-lg border p-4 transition hover:-translate-y-0.5 ${active ? 'border-[#2d74ff] bg-[#2d74ff]/10' : 'border-[var(--line)] bg-[var(--panel)]'}`}
+    >
+      <div className="flex items-start justify-between gap-4">
+        <div className="flex min-w-0 items-start gap-3">
+          <GripVertical size={17} className="mt-1 shrink-0 text-[var(--muted)]" />
+          <div className="min-w-0">
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="rounded-md bg-[#2d74ff]/12 px-2 py-1 text-xs font-semibold text-[#6ea1ff]">{questionTypeLabels[question.type]}</span>
+              {question.required && <span className="rounded-md bg-[var(--panel-2)] px-2 py-1 text-xs font-semibold">Required</span>}
+            </div>
+            <h3 className="mt-2 font-semibold">{question.title}</h3>
+            {question.description && <p className="mt-1 text-sm text-[var(--muted)]">{question.description}</p>}
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <IconButton label="Quick edit" icon={Wand2} onClick={select} />
+          <IconButton label="Duplicate question" icon={Copy} onClick={() => duplicateQuestion(sectionId, question.id)} />
+          <IconButton label="Delete question" icon={Trash2} onClick={() => deleteQuestion(sectionId, question.id)} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BuilderConfigPanel({
+  survey,
+  selectedQuestion,
+  selectedSection,
+  updateSurvey,
+  updateQuestion,
+  addQuestion,
+}: {
+  survey: BuilderSurvey;
+  selectedQuestion?: BuilderQuestion;
+  selectedSection: BuilderSection;
+  updateSurvey: (updater: (current: BuilderSurvey) => BuilderSurvey) => void;
+  updateQuestion: (questionId: string, updater: (question: BuilderQuestion) => BuilderQuestion) => void;
+  addQuestion: (type: BuilderQuestionType, sectionId?: string) => void;
+}) {
+  return (
+    <aside className="space-y-4 xl:sticky xl:top-[210px] xl:max-h-[calc(100vh-230px)] xl:overflow-auto">
+      <SurveySettingsPanel survey={survey} updateSurvey={updateSurvey} />
       <Card>
         <div className="flex items-center justify-between">
           <div>
-            <p className="text-sm font-semibold text-[#6ea1ff]">Collection modes</p>
-            <h2 className="mt-1 text-lg font-semibold">Ready for distribution</h2>
+            <p className="text-sm font-semibold text-[#6ea1ff]">Question configuration</p>
+            <h2 className="mt-1 text-lg font-semibold">{selectedQuestion ? 'Edit selected question' : 'No question selected'}</h2>
           </div>
-          <ClipboardList size={22} className="text-[#6ea1ff]" />
+          <Workflow size={19} className="text-[#6ea1ff]" />
         </div>
-        <div className="mt-5 grid grid-cols-2 gap-2">
-          {['Forms', 'Surveys', 'Links', 'Embeds', 'QR codes', 'Workflows'].map((item) => (
-            <div key={item} className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-3 text-sm">{item}</div>
-          ))}
-        </div>
-      </Card>
-      <Card>
-        <p className="text-sm font-semibold text-[#6ea1ff]">AI logic map</p>
-        <div className="mt-4 space-y-3">
-          {['If satisfaction <= 6, ask root-cause question', 'If delivery issue selected, route to operations', 'If high intent, create sales follow-up'].map((logic) => (
-            <div key={logic} className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-3 text-sm leading-5">{logic}</div>
-          ))}
-        </div>
-      </Card>
-      <Card>
-        <p className="text-sm font-semibold">{survey.title}</p>
-        <p className="mt-2 text-xs leading-5 text-[var(--muted)]">{survey.goal}</p>
-        <div className="mt-4 space-y-3">
-          {survey.questions.slice(0, 3).map((question, index) => (
-            <div key={question.id} className="rounded-lg bg-[var(--panel-2)] p-3">
-              <p className="text-xs font-semibold text-[var(--muted)]">Question {index + 1}</p>
-              <p className="mt-1 text-sm font-medium leading-5">{question.prompt}</p>
-            </div>
-          ))}
-        </div>
+        {selectedQuestion ? (
+          <QuestionSettings question={selectedQuestion} updateQuestion={updateQuestion} />
+        ) : (
+          <div className="mt-4 rounded-lg border border-dashed border-[var(--line)] bg-[var(--panel-2)] p-4 text-sm text-[var(--muted)]">
+            Select a question on the canvas or add one to {selectedSection.title}.
+            <button onClick={() => addQuestion('shortText', selectedSection.id)} className="mt-3 flex w-full items-center justify-center gap-2 rounded-lg bg-[#2d74ff] px-3 py-2 text-sm font-semibold text-white">
+              <Plus size={15} />
+              Add question
+            </button>
+          </div>
+        )}
       </Card>
     </aside>
   );
+}
+
+function QuestionSettings({ question, updateQuestion }: { question: BuilderQuestion; updateQuestion: (questionId: string, updater: (question: BuilderQuestion) => BuilderQuestion) => void }) {
+  const hasOptions = choiceQuestionTypes.includes(question.type);
+  const patch = (updates: Partial<BuilderQuestion>) => updateQuestion(question.id, (current) => ({ ...current, ...updates }));
+  const patchSettings = (updates: Partial<BuilderQuestion['settings']>) => updateQuestion(question.id, (current) => ({ ...current, settings: { ...current.settings, ...updates } }));
+
+  return (
+    <div className="mt-5 space-y-5">
+      <SettingsGroup title="General">
+        <BuilderInput label="Question Title" value={question.title} onChange={(value) => patch({ title: value })} />
+        <BuilderInput label="Description" value={question.description} onChange={(value) => patch({ description: value })} textarea />
+        <BuilderInput label="Placeholder Text" value={question.settings.placeholder} onChange={(value) => patchSettings({ placeholder: value })} />
+      </SettingsGroup>
+      <SettingsGroup title="Validation">
+        <ToggleRow label="Required" checked={question.required} onChange={(value) => patch({ required: value })} />
+        <NumberInput label="Minimum Length" value={question.settings.minLength ?? 0} onChange={(value) => patchSettings({ minLength: value })} />
+        <NumberInput label="Maximum Length" value={question.settings.maxLength ?? 120} onChange={(value) => patchSettings({ maxLength: value })} />
+      </SettingsGroup>
+      {hasOptions && (
+        <SettingsGroup title="Choice Options">
+          <div className="space-y-2">
+            {question.options.map((option, index) => (
+              <div key={`${option}-${index}`} className="flex items-center gap-2">
+                <GripVertical size={15} className="text-[var(--muted)]" />
+                <input
+                  value={option}
+                  onChange={(event) =>
+                    patch({
+                      options: question.options.map((item, optionIndex) => (optionIndex === index ? event.target.value : item)),
+                    })
+                  }
+                  className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none focus:border-[#2d74ff]"
+                />
+                <button onClick={() => patch({ options: question.options.filter((_, optionIndex) => optionIndex !== index) })} className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--line)]">
+                  <Trash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+          <button onClick={() => patch({ options: [...question.options, `Option ${question.options.length + 1}`] })} className="mt-3 inline-flex items-center gap-2 rounded-lg border border-[var(--line)] px-3 py-2 text-sm font-semibold">
+            <Plus size={15} />
+            Add Option
+          </button>
+        </SettingsGroup>
+      )}
+      <SettingsGroup title="Appearance">
+        <BuilderInput label="Help Text" value={question.settings.helpText} onChange={(value) => patchSettings({ helpText: value })} textarea />
+        <BuilderInput label="Default Value" value={question.settings.defaultValue} onChange={(value) => patchSettings({ defaultValue: value })} />
+      </SettingsGroup>
+      <SettingsGroup title="Advanced">
+        <ToggleRow label="Randomize Options" checked={question.settings.randomizeOptions} onChange={(value) => patchSettings({ randomizeOptions: value })} />
+      </SettingsGroup>
+    </div>
+  );
+}
+
+function SurveySettingsPanel({ survey, updateSurvey }: { survey: BuilderSurvey; updateSurvey: (updater: (current: BuilderSurvey) => BuilderSurvey) => void }) {
+  const updateSettings = (updater: (settings: BuilderSurvey['settings']) => BuilderSurvey['settings']) => updateSurvey((current) => ({ ...current, settings: updater(current.settings) }));
+  return (
+    <Card>
+      <p className="text-sm font-semibold text-[#6ea1ff]">Survey settings</p>
+      <div className="mt-5 space-y-5">
+        <SettingsGroup title="General">
+          <BuilderInput label="Survey Name" value={survey.title} onChange={(value) => updateSurvey((current) => ({ ...current, title: value }))} />
+          <BuilderInput label="Survey Description" value={survey.description} onChange={(value) => updateSurvey((current) => ({ ...current, description: value }))} textarea />
+        </SettingsGroup>
+        <SettingsGroup title="Branding">
+          <BuilderInput label="Logo Upload" value={survey.settings.branding.logoName} onChange={(value) => updateSettings((settings) => ({ ...settings, branding: { ...settings.branding, logoName: value } }))} />
+          <BuilderInput label="Primary Color" value={survey.settings.branding.primaryColor} onChange={(value) => updateSettings((settings) => ({ ...settings, branding: { ...settings.branding, primaryColor: value } }))} />
+          <BuilderInput label="Secondary Color" value={survey.settings.branding.secondaryColor} onChange={(value) => updateSettings((settings) => ({ ...settings, branding: { ...settings.branding, secondaryColor: value } }))} />
+        </SettingsGroup>
+        <SettingsGroup title="Behavior">
+          <ToggleRow label="Anonymous Responses" checked={survey.settings.behavior.anonymousResponses} onChange={(value) => updateSettings((settings) => ({ ...settings, behavior: { ...settings.behavior, anonymousResponses: value } }))} />
+          <ToggleRow label="Allow Multiple Responses" checked={survey.settings.behavior.allowMultipleResponses} onChange={(value) => updateSettings((settings) => ({ ...settings, behavior: { ...settings.behavior, allowMultipleResponses: value } }))} />
+          <ToggleRow label="Progress Bar" checked={survey.settings.behavior.progressBar} onChange={(value) => updateSettings((settings) => ({ ...settings, behavior: { ...settings.behavior, progressBar: value } }))} />
+        </SettingsGroup>
+        <SettingsGroup title="Limits">
+          <NumberInput label="Response Limit" value={survey.settings.limits.responseLimit} onChange={(value) => updateSettings((settings) => ({ ...settings, limits: { ...settings.limits, responseLimit: value } }))} />
+          <BuilderInput label="Survey Expiration Date" value={survey.settings.limits.expirationDate} onChange={(value) => updateSettings((settings) => ({ ...settings, limits: { ...settings.limits, expirationDate: value } }))} />
+        </SettingsGroup>
+        <SettingsGroup title="Thank You Screen">
+          <BuilderInput label="Title" value={survey.settings.thankYou.title} onChange={(value) => updateSettings((settings) => ({ ...settings, thankYou: { ...settings.thankYou, title: value } }))} />
+          <BuilderInput label="Message" value={survey.settings.thankYou.message} onChange={(value) => updateSettings((settings) => ({ ...settings, thankYou: { ...settings.thankYou, message: value } }))} textarea />
+        </SettingsGroup>
+      </div>
+    </Card>
+  );
+}
+
+function SurveyPreview({ survey, device }: { survey: BuilderSurvey; device: PreviewDevice }) {
+  const widthClass = device === 'desktop' ? 'max-w-5xl' : device === 'tablet' ? 'max-w-2xl' : 'max-w-sm';
+  return (
+    <section className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+      <div className={`mx-auto rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-5 transition-all ${widthClass}`}>
+        {survey.settings.behavior.progressBar && (
+          <div className="mb-5 h-2 rounded-full bg-[var(--panel)]">
+            <div className="h-2 w-1/3 rounded-full bg-[#2d74ff]" />
+          </div>
+        )}
+        <h1 className="text-3xl font-semibold">{survey.title}</h1>
+        <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{survey.description}</p>
+        <div className="mt-8 space-y-8">
+          {survey.sections.map((section) => (
+            <div key={section.id}>
+              <h2 className="text-xl font-semibold">{section.title}</h2>
+              <div className="mt-4 space-y-4">
+                {section.questions.map((question) => (
+                  <QuestionRenderer key={question.id} question={question} />
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+        <button className="mt-8 rounded-lg bg-[#2d74ff] px-5 py-3 text-sm font-semibold text-white">Submit response</button>
+      </div>
+    </section>
+  );
+}
+
+function QuestionRenderer({ question }: { question: BuilderQuestion }) {
+  return (
+    <div className="rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-semibold">{question.title} {question.required && <span className="text-[#6ea1ff]">*</span>}</p>
+          {question.description && <p className="mt-1 text-sm text-[var(--muted)]">{question.description}</p>}
+          {question.settings.helpText && <p className="mt-1 text-xs text-[var(--muted)]">{question.settings.helpText}</p>}
+        </div>
+        <span className="rounded-md bg-[#2d74ff]/12 px-2 py-1 text-xs font-semibold text-[#6ea1ff]">{questionTypeLabels[question.type]}</span>
+      </div>
+      <div className="mt-4">
+        {question.type === 'shortText' && <input readOnly placeholder={question.settings.placeholder} className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none" />}
+        {question.type === 'longText' && <textarea readOnly placeholder={question.settings.placeholder} className="min-h-24 w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none" />}
+        {question.type === 'email' && <input readOnly placeholder="name@company.com" className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none" />}
+        {question.type === 'phone' && <input readOnly placeholder="+91 98765 43210" className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none" />}
+        {question.type === 'date' && <input readOnly placeholder="YYYY-MM-DD" className="w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none" />}
+        {question.type === 'singleChoice' && <OptionList options={question.options} mode="radio" />}
+        {question.type === 'multipleChoice' && <OptionList options={question.options} mode="checkbox" />}
+        {question.type === 'dropdown' && <div className="rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm text-[var(--muted)]">Select an option</div>}
+        {question.type === 'starRating' && <div className="flex gap-1 text-[#6ea1ff]">{[1, 2, 3, 4, 5].map((star) => <span key={star}>★</span>)}</div>}
+        {question.type === 'nps' && <div className="grid grid-cols-11 gap-1">{Array.from({ length: 11 }, (_, index) => <span key={index} className="grid h-8 place-items-center rounded-md border border-[var(--line)] text-xs">{index}</span>)}</div>}
+        {question.type === 'likert' && <OptionList options={question.options} mode="radio" />}
+        {question.type === 'ranking' && <div className="space-y-2">{question.options.map((option, index) => <div key={option} className="flex items-center gap-2 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] p-2 text-sm"><span className="text-[var(--muted)]">{index + 1}</span>{option}</div>)}</div>}
+        {question.type === 'matrix' && <MatrixPreview />}
+        {question.type === 'fileUpload' && <div className="rounded-lg border border-dashed border-[var(--line)] bg-[var(--panel-2)] p-6 text-center text-sm text-[var(--muted)]">Upload file</div>}
+      </div>
+    </div>
+  );
+}
+
+function OptionList({ options, mode }: { options: string[]; mode: 'radio' | 'checkbox' }) {
+  return (
+    <div className="space-y-2">
+      {options.map((option) => (
+        <div key={option} className="flex items-center gap-2 text-sm">
+          <span className={`h-4 w-4 border border-[var(--line)] ${mode === 'radio' ? 'rounded-full' : 'rounded'}`} />
+          {option}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MatrixPreview() {
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[420px] text-sm">
+        <thead className="text-[var(--muted)]">
+          <tr>
+            <th className="py-2 text-left">Attribute</th>
+            <th>Low</th>
+            <th>Medium</th>
+            <th>High</th>
+          </tr>
+        </thead>
+        <tbody>
+          {['Quality', 'Speed', 'Support'].map((row) => (
+            <tr key={row} className="border-t border-[var(--line)]">
+              <td className="py-2">{row}</td>
+              {[1, 2, 3].map((item) => <td key={item} className="text-center"><span className="inline-block h-4 w-4 rounded-full border border-[var(--line)]" /></td>)}
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function SettingsGroup({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <p className="mb-3 text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{title}</p>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function BuilderInput({ label, value, onChange, textarea = false }: { label: string; value: string; onChange: (value: string) => void; textarea?: boolean }) {
+  const className = 'mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none transition focus:border-[#2d74ff]';
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-[var(--muted)]">{label}</span>
+      {textarea ? <textarea value={value} onChange={(event) => onChange(event.target.value)} className={`${className} min-h-20 resize-none`} /> : <input value={value} onChange={(event) => onChange(event.target.value)} className={className} />}
+    </label>
+  );
+}
+
+function NumberInput({ label, value, onChange }: { label: string; value: number; onChange: (value: number) => void }) {
+  return (
+    <label className="block">
+      <span className="text-xs font-medium text-[var(--muted)]">{label}</span>
+      <input value={value} type="number" onChange={(event) => onChange(Number(event.target.value))} className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none transition focus:border-[#2d74ff]" />
+    </label>
+  );
+}
+
+function ToggleRow({ label, checked, onChange }: { label: string; checked: boolean; onChange: (value: boolean) => void }) {
+  return (
+    <button onClick={() => onChange(!checked)} className="flex w-full items-center justify-between rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm">
+      <span>{label}</span>
+      <span className={`relative h-5 w-9 rounded-full transition ${checked ? 'bg-[#2d74ff]' : 'bg-[var(--line)]'}`}>
+        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition ${checked ? 'left-4' : 'left-0.5'}`} />
+      </span>
+    </button>
+  );
+}
+
+function IconButton({ label, icon: Icon, onClick }: { label: string; icon: typeof Plus; onClick: () => void }) {
+  return (
+    <button onClick={(event) => { event.stopPropagation(); onClick(); }} className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--line)] bg-[var(--panel-2)] text-[var(--muted)] transition hover:text-[#6ea1ff]" aria-label={label} title={label}>
+      <Icon size={15} />
+    </button>
+  );
+}
+
+function createInitialBuilderSurvey(): BuilderSurvey {
+  return {
+    id: 'survey-customer-satisfaction',
+    title: 'Customer Satisfaction Intelligence Survey',
+    description: 'Understand what customers value, where friction exists, and which actions should be prioritized.',
+    status: 'Draft',
+    settings: {
+      branding: { logoName: 'ActovIQ', primaryColor: '#2d74ff', secondaryColor: '#0f172a' },
+      behavior: { anonymousResponses: true, allowMultipleResponses: false, progressBar: true },
+      limits: { responseLimit: 5000, expirationDate: '2026-12-31' },
+      thankYou: { title: 'Thank you', message: 'Your response will help us make better decisions.' },
+    },
+    sections: [
+      {
+        id: 'section-customer-experience',
+        title: 'Customer experience',
+        order: 0,
+        questions: [
+          createQuestion('nps', 'q-nps', 'How likely are you to recommend us?'),
+          createQuestion('singleChoice', 'q-csat', 'Which area should we improve first?'),
+          createQuestion('longText', 'q-context', 'What should leadership know about your experience?'),
+        ].map(withOrder),
+      },
+      {
+        id: 'section-contact',
+        title: 'Follow-up details',
+        order: 1,
+        questions: [createQuestion('email', 'q-email', 'Where can we contact you if we need context?')].map(withOrder),
+      },
+    ],
+  };
+}
+
+function createQuestion(type: BuilderQuestionType, id = createId('question'), title = questionTypeLabels[type]): BuilderQuestion {
+  const hasOptions = choiceQuestionTypes.includes(type);
+  return {
+    id,
+    type,
+    title,
+    description: defaultDescription(type),
+    required: ['email', 'nps', 'singleChoice'].includes(type),
+    settings: {
+      placeholder: defaultPlaceholder(type),
+      minLength: type === 'shortText' || type === 'longText' ? 2 : undefined,
+      maxLength: type === 'longText' ? 500 : type === 'shortText' ? 120 : undefined,
+      helpText: '',
+      defaultValue: '',
+      randomizeOptions: false,
+    },
+    options: hasOptions ? defaultOptions(type) : [],
+    order: 0,
+  };
+}
+
+function defaultOptions(type: BuilderQuestionType) {
+  if (type === 'likert') return ['Strongly disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly agree'];
+  if (type === 'matrix') return ['Quality', 'Speed', 'Support'];
+  return ['Product experience', 'Pricing', 'Support', 'Delivery'];
+}
+
+function defaultDescription(type: BuilderQuestionType) {
+  if (type === 'nps') return 'Use this to measure referral intent.';
+  if (type === 'fileUpload') return 'Collect supporting documents or screenshots.';
+  return 'Edit this question to match the decision you need to make.';
+}
+
+function defaultPlaceholder(type: BuilderQuestionType) {
+  if (type === 'email') return 'name@company.com';
+  if (type === 'phone') return '+91 98765 43210';
+  if (type === 'date') return 'YYYY-MM-DD';
+  return 'Type your answer';
+}
+
+function createId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
+}
+
+function withOrder<T extends { order: number }>(item: T, index: number): T {
+  return { ...item, order: index };
+}
+
+function moveItem<T>(items: T[], fromIndex: number, toIndex: number) {
+  const next = [...items];
+  const [item] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, item);
+  return next;
 }
 
 function ReportsPage({ setPage }: { setPage: (page: Page) => void }) {
