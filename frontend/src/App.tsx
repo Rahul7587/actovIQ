@@ -49,20 +49,20 @@ type Page =
   | 'api'
   | 'blog'
   | 'docs'
+  | 'help'
+  | 'about'
   | 'login'
   | 'signup';
 
 type Theme = 'dark' | 'light';
 
 const pages: Array<{ id: Page; label: string }> = [
-  { id: 'pricing', label: 'Pricing' },
-  { id: 'dashboard', label: 'Dashboard' },
   { id: 'builder', label: 'Builder' },
-  { id: 'reports', label: 'AI Reports' },
+  { id: 'pricing', label: 'Pricing' },
   { id: 'enterprise', label: 'Enterprise' },
-  { id: 'api', label: 'API' },
-  { id: 'blog', label: 'Blog' },
   { id: 'docs', label: 'Docs' },
+  { id: 'help', label: 'Help' },
+  { id: 'about', label: 'About us' },
 ];
 
 const appNav = [
@@ -162,6 +162,8 @@ function App() {
       {page === 'api' && <ApiPage />}
       {page === 'blog' && <BlogPage />}
       {page === 'docs' && <DocsPage />}
+      {page === 'help' && <HelpPage />}
+      {page === 'about' && <AboutPage setPage={setPage} />}
       {page === 'login' && <AuthPage mode="login" setPage={setPage} />}
       {page === 'signup' && <AuthPage mode="signup" setPage={setPage} />}
     </div>
@@ -181,7 +183,7 @@ function TopNav({
 }) {
   return (
     <header className="sticky top-0 z-50 border-b border-[var(--line)] bg-[color-mix(in_srgb,var(--bg)_86%,transparent)] backdrop-blur-xl">
-      <div className="mx-auto flex max-w-7xl items-center justify-between gap-4 px-5 py-5 lg:px-8">
+      <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-4 px-5 py-5 lg:flex-nowrap lg:px-8">
         <button onClick={() => setPage('landing')} className="flex items-center gap-4 text-left">
           <img
             src="/actoviq-logo.png"
@@ -193,12 +195,12 @@ function TopNav({
             <span className="mt-1 block text-sm text-[var(--muted)]">Decision intelligence</span>
           </span>
         </button>
-        <nav className="hidden items-center gap-1 xl:flex">
+        <nav className="order-3 flex w-full gap-1 overflow-x-auto border-t border-[var(--line)] pt-3 lg:order-none lg:w-auto lg:border-t-0 lg:pt-0">
           {pages.map((item) => (
             <button
               key={item.id}
               onClick={() => setPage(item.id)}
-              className={`rounded-lg px-3 py-2 text-sm font-medium transition ${
+              className={`min-w-max rounded-lg px-3 py-2 text-sm font-medium transition ${
                 page === item.id ? 'bg-[var(--soft)] text-[#6ea1ff]' : 'text-[var(--muted)] hover:bg-[var(--panel-2)] hover:text-[var(--fg)]'
               }`}
             >
@@ -243,6 +245,9 @@ function LandingPage({ setPage }: { setPage: (page: Page) => void }) {
             </h1>
             <p className="mt-6 max-w-2xl text-lg leading-8 text-[var(--muted)]">
               ActovIQ is not another survey tool. It is an AI-first intelligence platform that analyzes feedback, generates reports, and tells your team what to do next.
+            </p>
+            <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--muted)]">
+              This page introduces the agenda: how ActovIQ captures customer signal, detects patterns, generates executive-ready intelligence, and helps teams move from raw responses to confident decisions.
             </p>
             <div className="mt-8 flex flex-col gap-3 sm:flex-row">
               <button onClick={() => setPage('signup')} className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#2d74ff] px-5 py-3 text-sm font-semibold text-white shadow-[0_20px_60px_rgba(45,116,255,0.35)] transition hover:bg-[#4b88ff]">
@@ -336,23 +341,6 @@ function LandingPage({ setPage }: { setPage: (page: Page) => void }) {
           })}
         </div>
       </Section>
-
-      <Section eyebrow="Testimonials" title="Built for teams that want decisions, not dashboards.">
-        <div className="grid gap-4 md:grid-cols-3">
-          {[
-            ['We stopped debating dashboards and started acting on the top three risks every Monday.', 'Founder, B2B SaaS'],
-            ['The executive report felt like it was written by our best strategy analyst.', 'CX Lead, Healthcare'],
-            ['Our clients do not want charts. They want decisions. ActovIQ gets that.', 'Partner, Growth Agency'],
-          ].map(([quote, person]) => (
-            <Card key={person}>
-              <p className="text-lg leading-7">"{quote}"</p>
-              <p className="mt-6 text-sm font-semibold text-[#6ea1ff]">{person}</p>
-            </Card>
-          ))}
-        </div>
-      </Section>
-
-      <PricingPreview setPage={setPage} />
 
       <section className="px-5 py-20 lg:px-8">
         <div className="mx-auto max-w-7xl rounded-lg border border-[#2d74ff]/30 bg-[#2d74ff] p-8 text-white shadow-[0_30px_100px_rgba(45,116,255,0.28)] md:p-12">
@@ -830,11 +818,70 @@ function DocsPage() {
   );
 }
 
-function ContentPage({ eyebrow, title, items }: { eyebrow: string; title: string; items: string[][] }) {
+function HelpPage() {
+  return (
+    <ContentPage
+      eyebrow="Help"
+      title="Get unstuck and move faster with ActovIQ."
+      copy="Find product guidance, support paths, setup help, and best practices for turning customer signal into action."
+      items={[
+        ['Product support', 'Get help with workspaces, access, billing, and deployment questions.'],
+        ['Builder guidance', 'Learn how to write better prompts and generate stronger intelligence workflows.'],
+        ['Report quality', 'Improve summaries, recommendations, and action plans for leadership teams.'],
+      ]}
+    />
+  );
+}
+
+function AboutPage({ setPage }: { setPage: (page: Page) => void }) {
+  return (
+    <main className="px-5 py-16 lg:px-8">
+      <div className="mx-auto grid max-w-7xl gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+        <div>
+          <PageHeader
+            eyebrow="About us"
+            title="We are building the intelligence layer for customer decisions."
+            copy="ActovIQ starts in India with a global-ready architecture for startups, SMBs, enterprises, agencies, healthcare, education, and public-sector teams."
+          />
+          <button onClick={() => setPage('builder')} className="mt-6 inline-flex items-center gap-2 rounded-lg bg-[#2d74ff] px-5 py-3 text-sm font-semibold text-white">
+            Explore Builder
+            <ArrowRight size={16} />
+          </button>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {[
+            ['Mission', 'Help teams stop guessing and start acting on customer intelligence.'],
+            ['Point of view', 'Collection is only step one. The real value is automated decisions.'],
+            ['Market focus', 'India-first execution with product architecture built for global scale.'],
+            ['Roadmap', 'Voice, image, video feedback, mobile apps, and enterprise intelligence systems.'],
+          ].map(([title, copy]) => (
+            <Card key={title}>
+              <Sparkles className="text-[#6ea1ff]" size={22} />
+              <h3 className="mt-5 text-lg font-semibold">{title}</h3>
+              <p className="mt-3 text-sm leading-6 text-[var(--muted)]">{copy}</p>
+            </Card>
+          ))}
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function ContentPage({
+  eyebrow,
+  title,
+  copy = 'Clear, practical guidance for teams building customer intelligence operations.',
+  items,
+}: {
+  eyebrow: string;
+  title: string;
+  copy?: string;
+  items: string[][];
+}) {
   return (
     <main className="px-5 py-16 lg:px-8">
       <div className="mx-auto max-w-7xl">
-        <PageHeader eyebrow={eyebrow} title={title} copy="Clear, practical guidance for teams building customer intelligence operations." />
+        <PageHeader eyebrow={eyebrow} title={title} copy={copy} />
         <div className="mt-8 grid gap-4 md:grid-cols-3">
           {items.map(([itemTitle, copy]) => (
             <Card key={itemTitle}>
