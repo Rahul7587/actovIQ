@@ -195,6 +195,11 @@ interface BuilderSurvey {
   sections: BuilderSection[];
 }
 
+interface BuilderPanelSizes {
+  library: number;
+  config: number;
+}
+
 const questionTypeLabels: Record<BuilderQuestionType, string> = {
   shortText: 'Short Text',
   longText: 'Long Text',
@@ -607,6 +612,7 @@ function BuilderPage({ setPage }: { setPage: (page: Page) => void }) {
   const [saveStatus, setSaveStatus] = useState('All changes saved');
   const [previewMode, setPreviewMode] = useState(false);
   const [previewDevice, setPreviewDevice] = useState<PreviewDevice>('desktop');
+  const [panelSizes, setPanelSizes] = useState<BuilderPanelSizes>({ library: 280, config: 360 });
 
   const selectedQuestion = useMemo(
     () => survey.sections.flatMap((section) => section.questions).find((question) => question.id === selectedQuestionId),
@@ -725,8 +731,28 @@ function BuilderPage({ setPage }: { setPage: (page: Page) => void }) {
     updateSection(sectionId, (current) => ({ ...current, questions: moveItem(current.questions, fromIndex, toIndex).map(withOrder) }));
   }
 
+  function resizePanel(panel: keyof BuilderPanelSizes, startEvent: React.MouseEvent<HTMLButtonElement>) {
+    startEvent.preventDefault();
+    const startX = startEvent.clientX;
+    const startSize = panelSizes[panel];
+    const direction = panel === 'library' ? 1 : -1;
+
+    function onMove(event: MouseEvent) {
+      const nextSize = Math.min(520, Math.max(220, startSize + (event.clientX - startX) * direction));
+      setPanelSizes((current) => ({ ...current, [panel]: Math.round(nextSize) }));
+    }
+
+    function onUp() {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+    }
+
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+
   return (
-    <AppShell active="builder" setPage={setPage}>
+    <AppShell active="builder" setPage={setPage} hideSidebar>
       <BuilderToolbar
         survey={survey}
         previewMode={previewMode}
@@ -738,8 +764,17 @@ function BuilderPage({ setPage }: { setPage: (page: Page) => void }) {
         touch={touch}
       />
 
-      <div className="mt-4 grid gap-4 xl:grid-cols-[280px_minmax(0,1fr)_360px]">
+      <div
+        className="mt-4 grid gap-4 xl:grid-cols-[var(--library-width)_10px_minmax(420px,1fr)_10px_var(--config-width)]"
+        style={
+          {
+            '--library-width': `${panelSizes.library}px`,
+            '--config-width': `${panelSizes.config}px`,
+          } as React.CSSProperties
+        }
+      >
         <QuestionLibrary query={query} setQuery={setQuery} addQuestion={addQuestion} />
+        <ResizeHandle label="Resize question blocks panel" onMouseDown={(event) => resizePanel('library', event)} />
         {previewMode ? (
           <SurveyPreview survey={survey} device={previewDevice} />
         ) : (
@@ -758,8 +793,10 @@ function BuilderPage({ setPage }: { setPage: (page: Page) => void }) {
             deleteQuestion={deleteQuestion}
             duplicateQuestion={duplicateQuestion}
             reorderQuestion={reorderQuestion}
+            updateQuestion={updateQuestion}
           />
         )}
+        <ResizeHandle label="Resize configuration panel" onMouseDown={(event) => resizePanel('config', event)} />
         <BuilderConfigPanel
           survey={survey}
           selectedQuestion={selectedQuestion}
@@ -919,6 +956,7 @@ function SurveyCanvas({
   deleteQuestion,
   duplicateQuestion,
   reorderQuestion,
+  updateQuestion,
 }: {
   survey: BuilderSurvey;
   selectedQuestionId: string;
@@ -934,6 +972,7 @@ function SurveyCanvas({
   deleteQuestion: (sectionId: string, questionId: string) => void;
   duplicateQuestion: (sectionId: string, questionId: string) => void;
   reorderQuestion: (sectionId: string, fromQuestionId: string, toQuestionId: string) => void;
+  updateQuestion: (questionId: string, updater: (question: BuilderQuestion) => BuilderQuestion) => void;
 }) {
   return (
     <section className="min-w-0 rounded-lg border border-[var(--line)] bg-[var(--panel)] p-4">
@@ -993,6 +1032,7 @@ function SurveyCanvas({
                   duplicateQuestion={duplicateQuestion}
                   deleteQuestion={deleteQuestion}
                   reorderQuestion={reorderQuestion}
+                  updateQuestion={updateQuestion}
                 />
               ))}
               <button
@@ -1024,6 +1064,7 @@ function QuestionCard({
   duplicateQuestion,
   deleteQuestion,
   reorderQuestion,
+  updateQuestion,
 }: {
   question: BuilderQuestion;
   sectionId: string;
@@ -1032,14 +1073,13 @@ function QuestionCard({
   duplicateQuestion: (sectionId: string, questionId: string) => void;
   deleteQuestion: (sectionId: string, questionId: string) => void;
   reorderQuestion: (sectionId: string, fromQuestionId: string, toQuestionId: string) => void;
+  updateQuestion: (questionId: string, updater: (question: BuilderQuestion) => BuilderQuestion) => void;
 }) {
+  const hasOptions = choiceQuestionTypes.includes(question.type) || question.type === 'nps';
+  const patch = (updates: Partial<BuilderQuestion>) => updateQuestion(question.id, (current) => ({ ...current, ...updates }));
+
   return (
     <div
-      draggable
-      onDragStart={(event) => {
-        event.dataTransfer.setData('question-id', question.id);
-        event.dataTransfer.setData('question-section-id', sectionId);
-      }}
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => {
         event.preventDefault();
@@ -1052,14 +1092,43 @@ function QuestionCard({
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex min-w-0 items-start gap-3">
-          <GripVertical size={17} className="mt-1 shrink-0 text-[var(--muted)]" />
-          <div className="min-w-0">
+          <button
+            draggable
+            onDragStart={(event) => {
+              event.dataTransfer.setData('question-id', question.id);
+              event.dataTransfer.setData('question-section-id', sectionId);
+            }}
+            className="mt-1 shrink-0 cursor-grab rounded-md p-1 text-[var(--muted)] hover:bg-[var(--panel-2)]"
+            aria-label="Drag question"
+          >
+            <GripVertical size={17} />
+          </button>
+          <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <span className="rounded-md bg-[#2d74ff]/12 px-2 py-1 text-xs font-semibold text-[#6ea1ff]">{questionTypeLabels[question.type]}</span>
-              {question.required && <span className="rounded-md bg-[var(--panel-2)] px-2 py-1 text-xs font-semibold">Required</span>}
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  patch({ required: !question.required });
+                }}
+                className={`rounded-md px-2 py-1 text-xs font-semibold ${question.required ? 'bg-[#2d74ff]/15 text-[#6ea1ff]' : 'bg-[var(--panel-2)] text-[var(--muted)]'}`}
+              >
+                {question.required ? 'Required' : 'Optional'}
+              </button>
             </div>
-            <h3 className="mt-2 font-semibold">{question.title}</h3>
-            {question.description && <p className="mt-1 text-sm text-[var(--muted)]">{question.description}</p>}
+            <input
+              value={question.title}
+              onChange={(event) => patch({ title: event.target.value })}
+              onClick={(event) => event.stopPropagation()}
+              className="mt-2 w-full rounded-md border border-transparent bg-transparent px-2 py-1 font-semibold outline-none transition focus:border-[var(--line)] focus:bg-[var(--panel-2)]"
+            />
+            <textarea
+              value={question.description}
+              onChange={(event) => patch({ description: event.target.value })}
+              onClick={(event) => event.stopPropagation()}
+              placeholder="Add description"
+              className="mt-1 min-h-10 w-full resize-none rounded-md border border-transparent bg-transparent px-2 py-1 text-sm text-[var(--muted)] outline-none transition focus:border-[var(--line)] focus:bg-[var(--panel-2)]"
+            />
           </div>
         </div>
         <div className="flex shrink-0 items-center gap-1">
@@ -1068,7 +1137,107 @@ function QuestionCard({
           <IconButton label="Delete question" icon={Trash2} onClick={() => deleteQuestion(sectionId, question.id)} />
         </div>
       </div>
+      <InlineQuestionEditor question={question} updateQuestion={updateQuestion} hasOptions={hasOptions} />
     </div>
+  );
+}
+
+function InlineQuestionEditor({
+  question,
+  updateQuestion,
+  hasOptions,
+}: {
+  question: BuilderQuestion;
+  updateQuestion: (questionId: string, updater: (question: BuilderQuestion) => BuilderQuestion) => void;
+  hasOptions: boolean;
+}) {
+  const patch = (updates: Partial<BuilderQuestion>) => updateQuestion(question.id, (current) => ({ ...current, ...updates }));
+  const patchSettings = (updates: Partial<BuilderQuestion['settings']>) =>
+    updateQuestion(question.id, (current) => ({ ...current, settings: { ...current.settings, ...updates } }));
+
+  if (hasOptions) {
+    return (
+      <div className="mt-4 border-t border-[var(--line)] pt-4">
+        <div className="mb-2 flex items-center justify-between">
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">
+            {question.type === 'nps' ? 'Scale labels' : 'Editable options'}
+          </p>
+          <button
+            onClick={(event) => {
+              event.stopPropagation();
+              patch({ options: [...question.options, `Option ${question.options.length + 1}`] });
+            }}
+            className="inline-flex items-center gap-1 rounded-md border border-[var(--line)] px-2 py-1 text-xs font-semibold"
+          >
+            <Plus size={13} />
+            Add
+          </button>
+        </div>
+        <div className="space-y-2">
+          {question.options.map((option, index) => (
+            <div key={`${question.id}-${index}`} className="flex items-center gap-2">
+              <GripVertical size={14} className="text-[var(--muted)]" />
+              <input
+                value={option}
+                onClick={(event) => event.stopPropagation()}
+                onChange={(event) =>
+                  patch({
+                    options: question.options.map((item, optionIndex) => (optionIndex === index ? event.target.value : item)),
+                  })
+                }
+                className="min-w-0 flex-1 rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none focus:border-[#2d74ff]"
+              />
+              <button
+                onClick={(event) => {
+                  event.stopPropagation();
+                  patch({ options: question.options.filter((_, optionIndex) => optionIndex !== index) });
+                }}
+                className="grid h-9 w-9 place-items-center rounded-lg border border-[var(--line)] text-[var(--muted)]"
+                aria-label="Delete option"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-4 grid gap-3 border-t border-[var(--line)] pt-4 md:grid-cols-2">
+      <label>
+        <span className="text-xs font-medium text-[var(--muted)]">Placeholder</span>
+        <input
+          value={question.settings.placeholder}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => patchSettings({ placeholder: event.target.value })}
+          className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none focus:border-[#2d74ff]"
+        />
+      </label>
+      <label>
+        <span className="text-xs font-medium text-[var(--muted)]">Help text</span>
+        <input
+          value={question.settings.helpText}
+          onClick={(event) => event.stopPropagation()}
+          onChange={(event) => patchSettings({ helpText: event.target.value })}
+          className="mt-1 w-full rounded-lg border border-[var(--line)] bg-[var(--panel-2)] px-3 py-2 text-sm outline-none focus:border-[#2d74ff]"
+        />
+      </label>
+    </div>
+  );
+}
+
+function ResizeHandle({ label, onMouseDown }: { label: string; onMouseDown: (event: React.MouseEvent<HTMLButtonElement>) => void }) {
+  return (
+    <button
+      onMouseDown={onMouseDown}
+      className="hidden cursor-col-resize rounded-full border border-transparent bg-[var(--panel)] transition hover:border-[#2d74ff]/40 hover:bg-[#2d74ff]/20 xl:block"
+      aria-label={label}
+      title={label}
+    >
+      <span className="mx-auto mt-4 block h-12 w-1 rounded-full bg-[var(--line)]" />
+    </button>
   );
 }
 
@@ -1382,7 +1551,7 @@ function createInitialBuilderSurvey(): BuilderSurvey {
 }
 
 function createQuestion(type: BuilderQuestionType, id = createId('question'), title = questionTypeLabels[type]): BuilderQuestion {
-  const hasOptions = choiceQuestionTypes.includes(type);
+  const hasOptions = choiceQuestionTypes.includes(type) || type === 'nps';
   return {
     id,
     type,
@@ -1403,6 +1572,7 @@ function createQuestion(type: BuilderQuestionType, id = createId('question'), ti
 }
 
 function defaultOptions(type: BuilderQuestionType) {
+  if (type === 'nps') return ['Not likely', 'Neutral', 'Extremely likely'];
   if (type === 'likert') return ['Strongly disagree', 'Disagree', 'Neutral', 'Agree', 'Strongly agree'];
   if (type === 'matrix') return ['Quality', 'Speed', 'Support'];
   return ['Product experience', 'Pricing', 'Support', 'Delivery'];
@@ -1714,29 +1884,41 @@ function AuthPage({ mode, setPage }: { mode: 'login' | 'signup'; setPage: (page:
   );
 }
 
-function AppShell({ active, setPage, children }: { active: Page; setPage: (page: Page) => void; children: React.ReactNode }) {
+function AppShell({
+  active,
+  setPage,
+  children,
+  hideSidebar = false,
+}: {
+  active: Page;
+  setPage: (page: Page) => void;
+  children: React.ReactNode;
+  hideSidebar?: boolean;
+}) {
   return (
-    <main className="grid min-h-[calc(100vh-73px)] lg:grid-cols-[280px_1fr]">
-      <aside className="border-b border-[var(--line)] bg-[var(--panel)] p-4 lg:border-b-0 lg:border-r">
-        <div className="flex gap-2 overflow-x-auto lg:block lg:space-y-2">
-          {appNav.map((item) => {
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.id}
-                onClick={() => setPage(item.id)}
-                className={`flex min-w-max items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition lg:w-full ${
-                  active === item.id ? 'bg-[#2d74ff] text-white' : 'text-[var(--muted)] hover:bg-[var(--panel-2)] hover:text-[var(--fg)]'
-                }`}
-              >
-                <Icon size={17} />
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-      </aside>
-      <section className="px-5 py-6 lg:px-8">{children}</section>
+    <main className={`grid min-h-[calc(100vh-73px)] ${hideSidebar ? '' : 'lg:grid-cols-[280px_1fr]'}`}>
+      {!hideSidebar && (
+        <aside className="border-b border-[var(--line)] bg-[var(--panel)] p-4 lg:border-b-0 lg:border-r">
+          <div className="flex gap-2 overflow-x-auto lg:block lg:space-y-2">
+            {appNav.map((item) => {
+              const Icon = item.icon;
+              return (
+                <button
+                  key={item.id}
+                  onClick={() => setPage(item.id)}
+                  className={`flex min-w-max items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition lg:w-full ${
+                    active === item.id ? 'bg-[#2d74ff] text-white' : 'text-[var(--muted)] hover:bg-[var(--panel-2)] hover:text-[var(--fg)]'
+                  }`}
+                >
+                  <Icon size={17} />
+                  {item.label}
+                </button>
+              );
+            })}
+          </div>
+        </aside>
+      )}
+      <section className={`px-5 py-6 ${hideSidebar ? 'lg:px-6' : 'lg:px-8'}`}>{children}</section>
     </main>
   );
 }
